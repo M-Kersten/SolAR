@@ -1,10 +1,8 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class EnterPlanetRange : MonoBehaviour
 {
-    public ShowWorld world;
+    public Location world;
     public bool showInfo;
     public bool VRViewable;
     [HideInInspector]
@@ -16,41 +14,34 @@ public class EnterPlanetRange : MonoBehaviour
     private bool triggered = false;
     private float dist;
 
+    
     void Start()
     {
-        viewPlanet = ViewPlanet.instance;
-        cameraPos = ARCameraFunctions.instance.GetCameraTransform();
+        viewPlanet = ViewPlanet.Instance;
+        cameraPos = ARCamera.Instance.CameraTransform;
     }
 
     void Update()
     {        
         dist = Vector3.Distance(cameraPos.position, transform.position);        
-        if (dist < radius && !triggered)
+        if (dist < radius * ViewPlanet.Instance.SolarSystemScale && !triggered)
         {
             triggered = true;
-            if (viewPlanet.cameraState == CameraState.AR)
+            if (ARCamera.Instance.cameraState == CameraState.AR)
             {
                 if (VRViewable)
-                {
                     viewPlanet.SetPlanet(world);
-                }                
             }                        
             if (showInfo)
-            {
                 planetInfo.SetActive(true);
-            }
         }
-        if (dist > radius && triggered)
+        if (dist > radius * ViewPlanet.Instance.SolarSystemScale && triggered)
         {
             triggered = false;
             if (showInfo)
-            {
                 planetInfo.SetActive(false);
-            }
             if (VRViewable)
-            {
-                viewPlanet.ResetPlanet();
-            }
+                ViewPlanet.Instance.LandingCanvas.SetActive(false);
         }        
     }
 }

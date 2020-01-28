@@ -1,66 +1,48 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
-[System.Serializable]
-public class Orbit
+public class FadeInObject : MonoBehaviour
 {
-    public string name;
-    public GameObject orbitLine;
-    public float orbitSpeed;
-    public GameObject planet;
-    public float planetRotateSpeed;
-}
-
-[System.Serializable]
-public enum ARLayer
-{
-    none,
-    goldilocks,
-    belts
-}
-
-public class FadeInObject : MonoBehaviour {
     public GameObject[] layers;   
     public GameObject goldilocksLayer;
     public GameObject beltsLayer;
     public GameObject ISS;
+    public GameObject saturnRing;
+    public GameObject Sun;
+    public Material sunMat;
 
-    private ViewPlanet viewPlanet;
-    public GameObject[] dissolvingObjects;
+    public MeshRenderer[] dissolvingObjects;
     public LineRenderer[] orbitLines;
 
     public Orbit[] orbits;
-
-    private Color transparent = new Color(255, 255, 255, 0);
-
+    
     public float fadeSpeed;
     public float orbitSpeed;
     public float planetRotationSpeed;
-
-    private float time;
     
     public bool orbiting;
-    private float lineWidth;
 
     public AnimationCurve positionAnim;
     public AnimationCurve scaleAnim;
     public AnimationCurve lineWidthAnim;
 
+    private float time;
+    private float lineWidth;
+    private ViewPlanet viewPlanet;
     private bool animationFinish;
 
     private void Awake()
     {
         transform.localScale = new Vector3(scaleAnim.Evaluate(0), scaleAnim.Evaluate(0), scaleAnim.Evaluate(0));
-        transform.localPosition = new Vector3(0, positionAnim.Evaluate(0), 0);
+        transform.localPosition = new Vector3(transform.localPosition.x, positionAnim.Evaluate(0), transform.localPosition.z);
         time = 0;
         lineWidth = orbitLines[0].startWidth;
         animationFinish = true;
-        foreach (GameObject item in dissolvingObjects)
+        foreach (MeshRenderer mesh in dissolvingObjects)
         {
-            item.GetComponent<MeshRenderer>().material.SetFloat("_Fill", 0);
+            mesh.material.SetFloat("_Fill", 0);
         }
         ISS.SetActive(false);
+        saturnRing.SetActive(false);
         foreach (Orbit item in orbits)
         {
             if (item.orbitLine.GetComponent<LineRenderer>() != null)
@@ -76,32 +58,37 @@ public class FadeInObject : MonoBehaviour {
         if (time * fadeSpeed < 1)
         {
             time += Time.deltaTime;
-            foreach (GameObject item in dissolvingObjects)
+            for (int i = 0; i < dissolvingObjects.Length; i++)
             {
-                item.GetComponent<MeshRenderer>().material.SetFloat("_Fill", time * fadeSpeed);
+                MeshRenderer mesh = dissolvingObjects[i];
+                mesh.material.SetFloat("_Fill", time * fadeSpeed);
             }
             foreach (LineRenderer item in orbitLines)
             {
                 item.startWidth = lineWidthAnim.Evaluate(time) * lineWidth;
                 item.endWidth = lineWidthAnim.Evaluate(time) * lineWidth;
             }
-            transform.localPosition = new Vector3(0, positionAnim.Evaluate(time), 0);
+            transform.localPosition = new Vector3(transform.localPosition.x, positionAnim.Evaluate(time), transform.localPosition.z);
             transform.localScale = new Vector3((scaleAnim.Evaluate(time) * .1f) + .9f, (scaleAnim.Evaluate(time) * .1f) + .9f, (scaleAnim.Evaluate(time) * .1f) + .9f);    
         }
         else if(animationFinish)
         {
             ISS.SetActive(true);
-            foreach (GameObject item in dissolvingObjects)
+            saturnRing.SetActive(true);
+            Sun.GetComponent<Renderer>().material = sunMat;
+            for (int i = 0; i < dissolvingObjects.Length; i++)
             {
-                item.GetComponent<MeshRenderer>().material.SetVector("_Noisespeed", new Vector4(0,0,0,0));
+                MeshRenderer mesh = dissolvingObjects[i];
+                mesh.material.SetVector("_Noisespeed", new Vector4(0,0,0,0));
             }
             animationFinish = false;
         }
 
         if (orbiting)
         {
-            foreach (Orbit item in orbits)
+            for (int i = 0; i < orbits.Length; i++)
             {
+                Orbit item = orbits[i];
                 item.orbitLine.transform.Rotate(Vector3.up * Time.deltaTime * -orbitSpeed / item.orbitSpeed, Space.Self);
                 item.planet.transform.Rotate(Vector3.up * Time.deltaTime * -planetRotationSpeed * item.planetRotateSpeed, Space.Self);
             }
@@ -111,10 +98,9 @@ public class FadeInObject : MonoBehaviour {
     public void SetLayer(int layer)
     {
         ARLayer aRlayer = (ARLayer)layer;
-        foreach (GameObject item in layers)
-        {
-            item.SetActive(false);
-        }        
+        for (int i = 0; i < layers.Length; i++)
+            layers[i].SetActive(false);
+
         switch (aRlayer)
         {
             case ARLayer.none:

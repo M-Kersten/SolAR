@@ -1,31 +1,28 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.XR.ARFoundation;
 
-public class ViewPlanet : MonoBehaviour {
-
-    public static ViewPlanet instance;
-    public CameraState cameraState;
-    
-    public World[] worlds;    
-    [Space(10)]
-    [Header("Scene")]
-    public Material milkyWayBackground;
-    public ARCoreBackgroundRenderer BGRenderer;    
-    public GameObject worldsGO;
-    public ShowWorld currentWorld = ShowWorld.none;
-    public ShowWorld currentInfoWorld = ShowWorld.none;
+public class ViewPlanet : MonoBehaviour
+{
+    public static ViewPlanet Instance => instance;
+    private static ViewPlanet instance;
 
     [HideInInspector]
+    public float SolarSystemScale;
+
+    [Header("Scene")]
+    public Material milkyWayBackground;
+    public Location currentViewingLocation = Location.none;
+
     public GameObject solarSystem;
 
     [Header("UI")]
-    public Camera mainCamera;
-    public Camera infoCamera;
-    public GameObject infoCanvas;
-    public GameObject infoPlanet;
-    public GameObject ISS;
+    public PlanetCarousel planetCarousel;
+    public Button PlanetMapButton;
+    public Button ClosePlanetMapButton;
+    public Button LandHereButton;
+    public Button ScaleButton;
+
     public GameObject planetMap;
     public Text planetName;
     public Text planetNameVR;
@@ -33,7 +30,7 @@ public class ViewPlanet : MonoBehaviour {
     public GameObject LeavingCanvas;
     public GameObject headerAR;
     public GameObject ARMain;
-    public GameObject trackingLost;
+    public CanvasGroup trackingLost;
     public GameObject buyFullUI;
     public GameObject buyFullUIinfo;
 
@@ -45,193 +42,101 @@ public class ViewPlanet : MonoBehaviour {
     #region init
     void Awake()
     {
-        if (instance = null)
-        {
-            instance = this;
-        }
-        RenderSettings.skybox = milkyWayBackground;        
-        cameraState = CameraState.AR;
+        instance = this;
+        PlanetMapButton.onClick.AddListener(() => SetPlanetMap(true));
+        ClosePlanetMapButton.onClick.AddListener(() => ToAR());
+        LandHereButton.onClick.AddListener(ToVRScene);
+        ScaleButton.onClick.AddListener(() => SlideUI.Instance.Slide(false, ()=> UIManager.Instance.SetScalingUI(true)));
+        ARSession.stateChanged += TrackingState;
+        currentViewingLocation = Location.none;
     }
     #endregion
 
     #region ChangeXR
+    private void SetPlanetMap(bool active)
+    {
+        UIFader.Instance.FadeWithAction(.5f, action: () =>
+        {
+            planetMap.SetActive(active);
+            ARMain.SetActive(!active);
+        });
+    }
 
     public void ToVRScene()
     {
-        if (IsFreePlanet(currentWorld))
+        if (!IsFreePlanet(currentViewingLocation) && !GameSettings.Instance.FullVersion)
         {
-            foreach (World item in worlds)
+            if (planetMap.activeInHierarchy)
             {
-                item.world.SetActive(false);
+                buyFullUIinfo.SetActive(true);
+                Debug.Log("buy full popup shown");
             }
-            worldsGO.transform.position = mainCamera.gameObject.transform.position;
-            cameraState = CameraState.VR;
+            else
+                buyFullUI.SetActive(true);
+
+            return;
+        }        
+        planetCarousel.ZoomOnPlanet(() => 
+        {
+            ARCamera.Instance.cameraState = CameraState.VR;
+            ARCamera.Instance.SetCameraBackground(false);
+            planetMap.SetActive(false);
             LandingCanvas.SetActive(false);
             LeavingCanvas.SetActive(true);
             solarSystem.SetActive(false);
+            ARMain.SetActive(false);
             headerAR.SetActive(false);
-            if (infoCanvas.activeInHierarchy)
-            {
-                GetWorld(currentInfoWorld).world.SetActive(true);
-                Debug.Log("name of currentinfo is: " + GetWorld(currentInfoWorld).name);
-                planetNameVR.text = GetWorld(currentInfoWorld).name;
-                RenderSettings.skybox = GetWorld(currentInfoWorld).sky;
-            }
-            else
-            {
-                GetWorld(currentWorld).world.SetActive(true);
-                RenderSettings.skybox = GetWorld(currentWorld).sky;
-            }
-            BGRenderer.enabled = false;
+            PlanetManager.Instance.SpawnPlanetEnvironment(currentViewingLocation);
+            planetNameVR.text = PlanetManager.Instance.World(currentViewingLocation).PresetWorld.Name;
             SetLayer(0);
-        }
-        else
-        {
-            buyFullUI.SetActive(true);
-        }
+        });
+        
     }
+
     public void ToAR()
     {
-        cameraState = CameraState.AR;
-        RenderSettings.skybox = milkyWayBackground;
-        ResetPlanet();
-        LandingCanvas.SetActive(false);
-        LeavingCanvas.SetActive(false);
-        solarSystem.SetActive(true);
-        headerAR.SetActive(true);
-        foreach (World item in worlds)
+        UIFader.Instance.FadeWithAction(.4f, action: () =>
         {
-            item.world.SetActive(false);
-        }
-        BGRenderer.enabled = true;
-    }
-    public void ToVRFromInfo()
-    {
-        if (IsFreePlanet(currentInfoWorld))
-        {
-            foreach (World item in worlds)
-            {
-                item.world.SetActive(false);
-            }
-            worldsGO.transform.position = mainCamera.gameObject.transform.position;
-            cameraState = CameraState.VR;
+            ARCamera.Instance.cameraState = CameraState.AR;
+            RenderSettings.skybox = milkyWayBackground;
             LandingCanvas.SetActive(false);
-            LeavingCanvas.SetActive(true);
-            solarSystem.SetActive(false);
-            headerAR.SetActive(false);
-            if (infoCanvas.activeInHierarchy)
-            {
-                GetWorld(currentInfoWorld).world.SetActive(true);
-                Debug.Log("name of currentinfo is: " + GetWorld(currentInfoWorld).name);
-                planetNameVR.text = GetWorld(currentInfoWorld).name;
-                RenderSettings.skybox = GetWorld(currentInfoWorld).sky;
-            }
-            else
-            {
-                GetWorld(currentWorld).world.SetActive(true);
-                RenderSettings.skybox = GetWorld(currentWorld).sky;
-            }
-            BGRenderer.enabled = false;
-            SetLayer(0);
-            mainCamera.enabled = true;
-            infoCamera.enabled = false;
-            ARMain.SetActive(true);
-            infoCanvas.SetActive(false);
-        }
-        else
-        {
-            buyFullUIinfo.SetActive(true);
-        }
-    }
-
-    public void BackToAR()
-    {
-        planetMap.SetActive(false);
-        ARMain.SetActive(true);
-        if (cameraState == CameraState.AR)
-        {
+            LeavingCanvas.SetActive(false);
+            solarSystem.SetActive(true);
+            planetMap.SetActive(false);
             headerAR.SetActive(true);
-        }
+            ARMain.gameObject.SetActive(true);
+            PlanetManager.Instance.SpawnPlanetEnvironment(Location.none);
+        });
     }
 
+    public void ToPlanetMap()
+    {
+        UIFader.Instance.FadeWithAction(.5f, action: () =>
+        {
+            PlanetManager.Instance.SpawnPlanetEnvironment(Location.none);
+            LeavingCanvas.SetActive(false);           
+            ARMain.SetActive(false);
+            planetMap.SetActive(true);
+            RenderSettings.skybox = milkyWayBackground;
+        });
+    }
     #endregion
 
     #region GetSetVariables
 
-    public void SetPlanet(ShowWorld world)
+    public void SetPlanet(Location world)
     {
-        currentWorld = world;
-        planetName.text = GetWorld(world).name;
-        planetNameVR.text = GetWorld(world).name;
-        LandingCanvas.SetActive(true);
+        currentViewingLocation = world;
+        planetName.text = PlanetManager.Instance.World(world).PresetWorld.Name;
+        planetNameVR.text = PlanetManager.Instance.World(world).PresetWorld.Name;
+        LandingCanvas.SetActive(world != Location.none);
     }
 
     public void ResetPlanet()
     {
-        if (cameraState == CameraState.AR)
-        {
-            currentWorld = ShowWorld.none;
-        }
+        if (ARCamera.Instance.cameraState == CameraState.AR)
+            currentViewingLocation = Location.none;
         LandingCanvas.SetActive(false);
-    }
-
-    public World GetWorld(ShowWorld showWorld)
-    {
-        int i;
-        switch (showWorld)
-        {
-            case ShowWorld.earth:
-                i = 0;
-                break;
-            case ShowWorld.moon:
-                i = 1;
-                break;
-            case ShowWorld.mars:
-                i = 2;
-                break;
-            case ShowWorld.venus:
-                i = 3;
-                break;
-            case ShowWorld.mercury:
-                i = 4;
-                break;
-            case ShowWorld.jupiter:
-                i = 5;
-                break;
-            case ShowWorld.saturn:
-                i = 6;
-                break;
-            case ShowWorld.uranus:
-                i = 7;
-                break;
-            case ShowWorld.neptune:
-                i = 8;
-                break;
-            case ShowWorld.ISS:
-                i = 9;
-                break;
-            case ShowWorld.none:
-                Debug.Log("no world selected");
-                i = 0;
-                break;
-            default:
-                Debug.Log("world not found");
-                i = 0;
-                break;
-        }
-        if (i < worlds.Length)
-        {
-            return worlds[i];
-        }
-        else
-        {
-            return worlds[0];
-        }
-    }
-
-    public void ChangeBackground(bool set)
-    {
-        BGRenderer.enabled = set;
     }
 
     public void SetLayer(int layer)
@@ -244,38 +149,39 @@ public class ViewPlanet : MonoBehaviour {
         layerCanvas[layer].SetActive(true);
     }
 
-    private bool IsFreePlanet(ShowWorld world)
+    private bool IsFreePlanet(Location world)
     {
-        bool isfree = true;
+        bool isfree = false;
+        isfree = GameSettings.Instance.FullVersion;
         switch (world)
         {
-            case ShowWorld.sun:
+            case Location.sun:
                 break;
-            case ShowWorld.mercury:
+            case Location.mercury:
                 break;
-            case ShowWorld.venus:
+            case Location.venus:
                 isfree = true;
                 break;
-            case ShowWorld.mars:
+            case Location.mars:
                 isfree = true;
                 break;
-            case ShowWorld.earth:
+            case Location.earth:
                 isfree = true;
                 break;
-            case ShowWorld.moon:
+            case Location.moon:
                 isfree = true;
                 break;
-            case ShowWorld.jupiter:
+            case Location.jupiter:
                 break;
-            case ShowWorld.saturn:
+            case Location.saturn:
                 break;
-            case ShowWorld.uranus:
+            case Location.uranus:
                 break;
-            case ShowWorld.neptune:
+            case Location.neptune:
                 break;
-            case ShowWorld.ISS:
+            case Location.ISS:
                 break;
-            case ShowWorld.none:
+            case Location.none:
                 isfree = true;
                 break;
             default:
@@ -286,94 +192,22 @@ public class ViewPlanet : MonoBehaviour {
 
     #endregion
 
-    public void DisableText()
-    {
-        LandingCanvas.SetActive(false);
-    }      
+    public void DisableText() => LandingCanvas.SetActive(false);
 
-    public void ViewPlanetInfo(bool on)
+    public void Animate() => solarSytemFadeIn.orbiting = !solarSytemFadeIn.orbiting;
+
+    public void TrackingState(ARSessionStateChangedEventArgs sessionState)
     {
-        currentInfoWorld = currentWorld;
-       
-        mainCamera.enabled = !on;
-        infoCamera.enabled = on;
-        headerAR.SetActive(!on);
-        ARMain.SetActive(!on);
-        infoCanvas.SetActive(on);
-        if (on)
+        bool tracking = sessionState.state == ARSessionState.SessionTracking;
+        trackingLost.alpha = tracking ? 0 : 1;
+
+        if (tracking)
+            trackingLost.gameObject.SetActive(true);
+
+        LeanTween.alphaCanvas(trackingLost, tracking ? 1 : 0, .75f).setEase(LeanTweenType.easeInOutSine).setOnComplete(() =>
         {
-            if (currentInfoWorld == ShowWorld.ISS)
-            {
-                ISS.SetActive(true);
-                infoPlanet.SetActive(false);
-            }
-            else
-            {
-                ISS.SetActive(false);
-                infoPlanet.SetActive(true);
-                infoPlanet.GetComponent<Renderer>().material = GetWorld(currentInfoWorld).planetMat;
-            }
-            foreach(World item in worlds)
-            {
-                item.info.gameObject.SetActive(false);
-            }
-            GetWorld(currentInfoWorld).info.SetActive(true);
-        }
-        if (!on)
-        {
-            if (cameraState == CameraState.AR)
-            {
-                headerAR.SetActive(true);
-            }
-            else
-            {
-                headerAR.SetActive(false);
-            }
-        }        
+            if (tracking)
+                trackingLost.gameObject.SetActive(false);
+        });
     }
-
-    public void ViewPlanetInfo(int planet)
-    {
-        currentInfoWorld = worlds[planet].showWorld;
-
-        mainCamera.enabled = false;
-        infoCamera.enabled = true;
-        headerAR.SetActive(false);
-        ARMain.SetActive(false);
-        infoCanvas.SetActive(true);
-        if (currentInfoWorld == ShowWorld.ISS)
-        {
-            ISS.SetActive(true);
-            infoPlanet.SetActive(false);
-        }
-        else
-        {
-            ISS.SetActive(false);
-            infoPlanet.SetActive(true);
-            infoPlanet.GetComponent<Renderer>().material = worlds[planet].planetMat;
-        }
-        foreach (World item in worlds)
-        {
-            item.info.gameObject.SetActive(false);
-        }
-        worlds[planet].info.SetActive(true);
-    }
-    
-    public void BackToMap()
-    {
-        infoCanvas.SetActive(false);
-        planetMap.SetActive(true);
-        mainCamera.enabled = true;
-        infoCamera.enabled = false;
-    }   
-      
-    public void Animate()
-    {
-        solarSytemFadeIn.orbiting = !solarSytemFadeIn.orbiting;
-    }
-
-    public void TrackingState(bool tracking)
-    {
-        trackingLost.SetActive(!tracking);
-    }   
 }
